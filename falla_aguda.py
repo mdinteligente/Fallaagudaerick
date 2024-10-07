@@ -1,22 +1,39 @@
 import streamlit as st
 import pandas as pd
+import json
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import os
 import pickle
+import io
 
 # Ámbito para la API de Google Drive
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 # Autenticación con Google Drive
 def authenticate_google_drive():
-    """Autenticar usando OAuth 2.0 y guardar token en un archivo local."""
     creds = None
     if os.path.exists('token.pickle'):
         with open('token.pickle', 'rb') as token:
             creds = pickle.load(token)
     if not creds or not creds.valid:
+        # Cargar las credenciales desde los secretos de Streamlit
+        client_secret = {
+            "installed": {
+                "client_id": st.secrets["client_secret"]["client_id"],
+                "client_secret": st.secrets["client_secret"]["client_secret"],
+                "auth_uri": st.secrets["client_secret"]["auth_uri"],
+                "token_uri": st.secrets["client_secret"]["token_uri"],
+                "auth_provider_x509_cert_url": st.secrets["client_secret"]["auth_provider_x509_cert_url"],
+                "redirect_uris": [st.secrets["client_secret"]["redirect_uris"]]
+            }
+        }
+
+        # Guardar temporalmente el archivo client_secret.json
+        with open("client_secret.json", "w") as f:
+            json.dump(client_secret, f)
+
         flow = InstalledAppFlow.from_client_secrets_file(
             'client_secret.json', SCOPES)
         creds = flow.run_local_server(port=0)
@@ -32,7 +49,7 @@ def upload_to_drive(file_name):
     file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
     st.success(f"Archivo guardado en Google Drive con ID: {file.get('id')}")
 
-# Verifica si el archivo ya existe en Google Drive
+# Verificar si el archivo ya existe en Google Drive
 def file_exists_in_drive(file_name):
     service = authenticate_google_drive()
     results = service.files().list(q=f"name='{file_name}'", spaces='drive', fields="files(id, name)").execute()
@@ -45,12 +62,12 @@ def file_exists_in_drive(file_name):
 def download_file_from_drive(file_id, file_name):
     service = authenticate_google_drive()
     request = service.files().get_media(fileId=file_id)
-    with open(file_name, 'wb') as f:
-        downloader = MediaFileUpload(f)
-        done = False
-        while done is False:
-            status, done = downloader.next_chunk()
-    return file_name
+    fh = io.FileIO(file_name, 'wb')
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    fh.close()
 
 # Interfaz de usuario de Streamlit
 st.title("Formulario de Datos para Falla Cardíaca Aguda")
