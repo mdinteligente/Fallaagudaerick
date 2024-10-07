@@ -3,10 +3,9 @@ import pandas as pd
 import json
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
+from googleapiclient.http import MediaFileUpload
 import os
 import pickle
-import io
 
 # Ámbito para la API de Google Drive
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -62,66 +61,79 @@ def file_exists_in_drive(file_name):
 def download_file_from_drive(file_id, file_name):
     service = authenticate_google_drive()
     request = service.files().get_media(fileId=file_id)
-    fh = io.FileIO(file_name, 'wb')
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while done is False:
-        status, done = downloader.next_chunk()
-    fh.close()
+    with open(file_name, 'wb') as f:
+        downloader = MediaFileUpload(f)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
 
 # Interfaz de usuario de Streamlit
 st.title("Formulario de Datos para Falla Cardíaca Aguda")
 
-# Formulario de recolección de datos
-with st.form("Datos Falla Cardíaca"):
-    nombre = st.text_input("Nombre del paciente")
-    edad = st.number_input("Edad", min_value=0, max_value=120, step=1)
-    sexo = st.selectbox("Sexo", ["Masculino", "Femenino"])
-    frecuencia_cardiaca = st.number_input("Frecuencia Cardiaca (lpm)", min_value=0)
-    presion_arterial = st.text_input("Presión Arterial (mmHg)")
-    saturacion_oxigeno = st.number_input("Saturación de Oxígeno (%)", min_value=0, max_value=100)
-    diuresis = st.text_input("Diuresis (ml/24h)")
-    fraccion_eyeccion = st.number_input("Fracción de Eyección (%)", min_value=0.0, max_value=100.0, step=0.1)
-    troponina = st.number_input("Troponina (ng/L)", min_value=0.0, step=0.1)
-    peptido_nat_t = st.number_input("Péptido Natriurético (BNP/NT-proBNP)", min_value=0.0)
+# Solicitud de usuario y contraseña
+st.subheader("Iniciar sesión")
+usuario_input = st.text_input("Usuario")
+password_input = st.text_input("Contraseña", type="password")
 
-    # Botón para enviar los datos
-    submit_button = st.form_submit_button(label="Enviar datos")
+# Verificar credenciales
+if usuario_input == "falla_aguda" and password_input == "erick":
+    st.success("Inicio de sesión exitoso")
+    
+    # Formulario de recolección de datos
+    with st.form("Datos Falla Cardíaca"):
+        nombre = st.text_input("Nombre del paciente")
+        edad = st.number_input("Edad", min_value=0, max_value=120, step=1)
+        sexo = st.selectbox("Sexo", ["Masculino", "Femenino"])
+        frecuencia_cardiaca = st.number_input("Frecuencia Cardiaca (lpm)", min_value=0)
+        presion_arterial = st.text_input("Presión Arterial (mmHg)")
+        saturacion_oxigeno = st.number_input("Saturación de Oxígeno (%)", min_value=0, max_value=100)
+        diuresis = st.text_input("Diuresis (ml/24h)")
+        fraccion_eyeccion = st.number_input("Fracción de Eyección (%)", min_value=0.0, max_value=100.0, step=0.1)
+        troponina = st.number_input("Troponina (ng/L)", min_value=0.0, step=0.1)
+        peptido_nat_t = st.number_input("Péptido Natriurético (BNP/NT-proBNP)", min_value=0.0)
 
-# Si el usuario envía los datos
-if submit_button:
-    # Crear un dataframe con los datos ingresados
-    data = {
-        'Nombre': [nombre],
-        'Edad': [edad],
-        'Sexo': [sexo],
-        'Frecuencia Cardiaca': [frecuencia_cardiaca],
-        'Presión Arterial': [presion_arterial],
-        'Saturación de Oxígeno': [saturacion_oxigeno],
-        'Diuresis': [diuresis],
-        'Fracción de Eyección': [fraccion_eyeccion],
-        'Troponina': [troponina],
-        'Péptido Natriurético': [peptido_nat_t]
-    }
-    df_new = pd.DataFrame(data)
-    
-    # Verificar si el archivo ya existe en Google Drive
-    file_name = 'falla_cardiaca_datos.csv'
-    file_exists, file_id = file_exists_in_drive(file_name)
-    
-    if file_exists:
-        # Descargar el archivo existente y cargarlo en un DataFrame
-        download_file_from_drive(file_id, file_name)
-        df_existing = pd.read_csv(file_name)
-        # Combinar los datos existentes con los nuevos datos
-        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-    else:
-        # Si no existe, usar solo los nuevos datos
-        df_combined = df_new
+        # Botón para enviar los datos
+        submit_button = st.form_submit_button(label="Enviar datos")
 
-    # Guardar el DataFrame combinado en un archivo CSV
-    df_combined.to_csv(file_name, index=False)
-    
-    # Subir el archivo CSV actualizado a Google Drive
-    upload_to_drive(file_name)
+    # Si el usuario envía los datos
+    if submit_button:
+        # Crear un dataframe con los datos ingresados
+        data = {
+            'Nombre': [nombre],
+            'Edad': [edad],
+            'Sexo': [sexo],
+            'Frecuencia Cardiaca': [frecuencia_cardiaca],
+            'Presión Arterial': [presion_arterial],
+            'Saturación de Oxígeno': [saturacion_oxigeno],
+            'Diuresis': [diuresis],
+            'Fracción de Eyección': [fraccion_eyeccion],
+            'Troponina': [troponina],
+            'Péptido Natriurético': [peptido_nat_t]
+        }
+        df_new = pd.DataFrame(data)
+        
+        # Verificar si el archivo ya existe en Google Drive
+        file_name = 'falla_cardiaca_datos.csv'
+        file_exists, file_id = file_exists_in_drive(file_name)
+        
+        if file_exists:
+            # Descargar el archivo existente y cargarlo en un DataFrame
+            download_file_from_drive(file_id, file_name)
+            df_existing = pd.read_csv(file_name)
+            # Combinar los datos existentes con los nuevos datos
+            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+        else:
+            # Si no existe, usar solo los nuevos datos
+            df_combined = df_new
+
+        # Guardar el DataFrame combinado en un archivo CSV
+        df_combined.to_csv(file_name, index=False)
+        
+        # Subir el archivo CSV actualizado a Google Drive
+        upload_to_drive(file_name)
+
+else:
+    if usuario_input and password_input:
+        st.error("Usuario o contraseña incorrectos")
+
 
