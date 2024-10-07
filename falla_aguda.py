@@ -3,8 +3,8 @@ import pandas as pd
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-import pickle
 import os
+import pickle
 
 # Ámbito para la API de Google Drive
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -18,7 +18,7 @@ def authenticate_google_drive():
             creds = pickle.load(token)
     if not creds or not creds.valid:
         flow = InstalledAppFlow.from_client_secrets_file(
-            'credentials.json', SCOPES)
+            'client_secret.json', SCOPES)
         creds = flow.run_local_server(port=0)
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
@@ -31,6 +31,26 @@ def upload_to_drive(file_name):
     media = MediaFileUpload(file_name, mimetype='text/csv')
     file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
     st.success(f"Archivo guardado en Google Drive con ID: {file.get('id')}")
+
+# Verifica si el archivo ya existe en Google Drive
+def file_exists_in_drive(file_name):
+    service = authenticate_google_drive()
+    results = service.files().list(q=f"name='{file_name}'", spaces='drive', fields="files(id, name)").execute()
+    files = results.get('files', [])
+    if not files:
+        return False, None
+    return True, files[0]['id']
+
+# Descargar archivo existente de Google Drive
+def download_file_from_drive(file_id, file_name):
+    service = authenticate_google_drive()
+    request = service.files().get_media(fileId=file_id)
+    with open(file_name, 'wb') as f:
+        downloader = MediaFileUpload(f)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+    return file_name
 
 # Interfaz de usuario de Streamlit
 st.title("Formulario de Datos para Falla Cardíaca Aguda")
@@ -53,6 +73,7 @@ with st.form("Datos Falla Cardíaca"):
 
 # Si el usuario envía los datos
 if submit_button:
+    # Crear un dataframe con los datos ingresados
     data = {
         'Nombre': [nombre],
         'Edad': [edad],
@@ -65,11 +86,25 @@ if submit_button:
         'Troponina': [troponina],
         'Péptido Natriurético': [peptido_nat_t]
     }
-    df = pd.DataFrame(data)
+    df_new = pd.DataFrame(data)
     
-    # Guardar los datos en un archivo CSV local
-    csv_file = 'falla_cardiaca_datos.csv'
-    df.to_csv(csv_file, index=False)
+    # Verificar si el archivo ya existe en Google Drive
+    file_name = 'falla_cardiaca_datos.csv'
+    file_exists, file_id = file_exists_in_drive(file_name)
     
-    # Subir el archivo CSV a Google Drive
-    upload_to_drive(csv_file)
+    if file_exists:
+        # Descargar el archivo existente y cargarlo en un DataFrame
+        download_file_from_drive(file_id, file_name)
+        df_existing = pd.read_csv(file_name)
+        # Combinar los datos existentes con los nuevos datos
+        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+    else:
+        # Si no existe, usar solo los nuevos datos
+        df_combined = df_new
+
+    # Guardar el DataFrame combinado en un archivo CSV
+    df_combined.to_csv(file_name, index=False)
+    
+    # Subir el archivo CSV actualizado a Google Drive
+    upload_to_drive(file_name)
+
