@@ -43,31 +43,42 @@ def authenticate_google_drive():
 
 # Función para subir archivo a Google Drive
 def upload_to_drive(file_name):
-    service = authenticate_google_drive()
-    file_metadata = {'name': file_name}
-    media = MediaFileUpload(file_name, mimetype='text/csv')
-    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    st.success(f"Archivo guardado en Google Drive con ID: {file.get('id')}")
+    try:
+        service = authenticate_google_drive()
+        file_metadata = {'name': file_name}
+        media = MediaFileUpload(file_name, mimetype='text/csv')
+        file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        st.success(f"Archivo guardado en Google Drive con ID: {file.get('id')}")
+    except Exception as e:
+        st.error(f"Error al subir el archivo a Google Drive: {e}")
 
 # Verificar si el archivo ya existe en Google Drive
 def file_exists_in_drive(file_name):
-    service = authenticate_google_drive()
-    results = service.files().list(q=f"name='{file_name}'", spaces='drive', fields="files(id, name)").execute()
-    files = results.get('files', [])
-    if not files:
+    try:
+        service = authenticate_google_drive()
+        results = service.files().list(q=f"name='{file_name}'", spaces='drive', fields="files(id, name)").execute()
+        files = results.get('files', [])
+        if not files:
+            return False, None
+        return True, files[0]['id']
+    except Exception as e:
+        st.error(f"Error al verificar si el archivo existe en Google Drive: {e}")
         return False, None
-    return True, files[0]['id']
 
 # Descargar archivo existente de Google Drive
 def download_file_from_drive(file_id, file_name):
-    service = authenticate_google_drive()
-    request = service.files().get_media(fileId=file_id)
-    fh = io.FileIO(file_name, 'wb')
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while done is False:
-        status, done = downloader.next_chunk()
-    fh.close()
+    try:
+        service = authenticate_google_drive()
+        request = service.files().get_media(fileId=file_id)
+        fh = io.FileIO(file_name, 'wb')
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+        fh.close()
+        st.success("Archivo descargado exitosamente.")
+    except Exception as e:
+        st.error(f"Error al descargar el archivo de Google Drive: {e}")
 
 # Interfaz de usuario de Streamlit
 st.title("Formulario de Datos para Falla Cardíaca Aguda")
@@ -113,30 +124,48 @@ if usuario_input == "falla_aguda" and password_input == "erick":
             'Péptido Natriurético': [peptido_nat_t]
         }
         df_new = pd.DataFrame(data)
-        
+
+        # Mostrar los datos ingresados por el usuario para depuración
+        st.write("Datos ingresados:")
+        st.write(df_new)
+
         # Verificar si el archivo ya existe en Google Drive
         file_name = 'falla_cardiaca_datos.csv'
         file_exists, file_id = file_exists_in_drive(file_name)
         
+        st.write(f"Archivo existe en Google Drive: {file_exists}")
+
         if file_exists:
             # Descargar el archivo existente y cargarlo en un DataFrame
-            download_file_from_drive(file_id, file_name)
-            df_existing = pd.read_csv(file_name)
-            # Combinar los datos existentes con los nuevos datos
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+            st.write("Descargando archivo existente de Google Drive...")
+            try:
+                download_file_from_drive(file_id, file_name)
+                df_existing = pd.read_csv(file_name)
+                st.write("Archivo descargado con éxito.")
+                st.write("Contenido del archivo existente:")
+                st.write(df_existing)
+                
+                # Combinar los datos existentes con los nuevos datos
+                df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+            except Exception as e:
+                st.error(f"Error al descargar o combinar los datos: {e}")
         else:
             # Si no existe, usar solo los nuevos datos
+            st.write("No existe archivo anterior, creando uno nuevo.")
             df_combined = df_new
 
         # Guardar el DataFrame combinado en un archivo CSV
-        df_combined.to_csv(file_name, index=False)
-        
-        # Subir el archivo CSV actualizado a Google Drive
-        upload_to_drive(file_name)
+        try:
+            df_combined.to_csv(file_name, index=False)
+            st.write("Datos combinados guardados en CSV:")
+            st.write(df_combined)
+
+            # Subir el archivo CSV actualizado a Google Drive
+            upload_to_drive(file_name)
+            st.success("Datos enviados y guardados exitosamente.")
+        except Exception as e:
+            st.error(f"Error al guardar o subir el archivo CSV: {e}")
 
 else:
     if usuario_input and password_input:
         st.error("Usuario o contraseña incorrectos")
-
-
-
