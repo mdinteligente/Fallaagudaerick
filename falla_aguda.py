@@ -3,14 +3,15 @@ import pandas as pd
 import json
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import os
 import pickle
+import io
 
 # Ámbito para la API de Google Drive
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
-# Autenticación con Google Drive
+# Función para autenticar en Google Drive
 def authenticate_google_drive():
     creds = None
     if os.path.exists('token.pickle'):
@@ -61,11 +62,12 @@ def file_exists_in_drive(file_name):
 def download_file_from_drive(file_id, file_name):
     service = authenticate_google_drive()
     request = service.files().get_media(fileId=file_id)
-    with open(file_name, 'wb') as f:
-        downloader = MediaFileUpload(f)
-        done = False
-        while done is False:
-            status, done = downloader.next_chunk()
+    fh = io.FileIO(file_name, 'wb')
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    fh.close()
 
 # Interfaz de usuario de Streamlit
 st.title("Formulario de Datos para Falla Cardíaca Aguda")
@@ -135,5 +137,6 @@ if usuario_input == "falla_aguda" and password_input == "erick":
 else:
     if usuario_input and password_input:
         st.error("Usuario o contraseña incorrectos")
+
 
 
