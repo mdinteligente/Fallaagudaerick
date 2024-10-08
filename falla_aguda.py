@@ -5,6 +5,9 @@ from googleapiclient.http import MediaFileUpload
 import pandas as pd
 import os
 
+# ID de la carpeta en Google Drive donde se cargarán los archivos
+FOLDER_ID = "1ONJJzcWn7jpHSJeQAS9QKoAt7W6Swck9"
+
 # Función para autenticar usando la cuenta de servicio
 def authenticate_google_drive():
     credentials = service_account.Credentials.from_service_account_info(
@@ -18,7 +21,7 @@ def authenticate_google_drive():
 def file_exists_in_drive(file_name):
     try:
         service = authenticate_google_drive()
-        query = f"name='{file_name}' and trashed=false"
+        query = f"name='{file_name}' and trashed=false and '{FOLDER_ID}' in parents"
         results = service.files().list(q=query, spaces='drive').execute()
         files = results.get('files', [])
         if len(files) > 0:
@@ -29,7 +32,7 @@ def file_exists_in_drive(file_name):
         st.error(f"Error al verificar si el archivo existe en Google Drive: {e}")
         return False, None
 
-# Función para subir o actualizar un archivo en Google Drive
+# Función para subir o actualizar un archivo en la carpeta de Google Drive
 def upload_to_drive(file_name):
     try:
         service = authenticate_google_drive()
@@ -41,11 +44,14 @@ def upload_to_drive(file_name):
             service.files().update(fileId=file_id, media_body=media).execute()
             st.success(f"Archivo actualizado en Google Drive: {file_name}")
         else:
-            # Crea un archivo nuevo
-            file_metadata = {'name': file_name}
+            # Crea un archivo nuevo en la carpeta especificada
+            file_metadata = {
+                'name': file_name,
+                'parents': [FOLDER_ID]  # Aseguramos que se suba a la carpeta correcta
+            }
             media = MediaFileUpload(file_name, mimetype='text/csv')
             service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-            st.success(f"Archivo guardado en Google Drive: {file_name}")
+            st.success(f"Archivo guardado en la carpeta de Google Drive: {file_name}")
 
     except Exception as e:
         st.error(f"Error al subir el archivo a Google Drive: {e}")
